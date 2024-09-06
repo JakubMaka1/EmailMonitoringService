@@ -16,6 +16,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 namespace EmailMonitoringService
 {
@@ -43,34 +44,32 @@ namespace EmailMonitoringService
 
         protected override void OnStart(string[] args)
         {
-            ProgramRuntime programRuntime = new ProgramRuntime();
-            
             _cancellationTokenSource = new CancellationTokenSource();
             _monitoringTask = Task.Run(() => StartMonitoring(_cancellationTokenSource.Token));
         }
 
         protected override void OnStop()
         {
-            ProgramRuntime programRuntime = new ProgramRuntime();
-            programRuntime.StopAndDisplayRuntime();
             _cancellationTokenSource.Cancel();
-            SMTP.SendEmail("Error", "Wyłaczenie programu");
+            SMTP.SendEmail("jakub.maka@elis.com","Error", "Wyłaczenie programu");
             Logger.WriteSystemLog("Wyłaczenie programu");
         }
 
         private async Task StartMonitoring(CancellationToken cancellationToken)
-        {            
-            
+        {
+            ProgramRuntime programRuntime = new ProgramRuntime();
             Logger.CompareDate();
 
             if (GlobalsVariables.email == null || GlobalsVariables.appPassword == null)
             {
                 Logger.WriteEmailLog("Email or password environment variable is not set.");
-                SMTP.SendEmail("Error", "Email or password environment variable is not set.");
+                SMTP.SendEmail("jakub.maka@elis.com","Error", "Email or password environment variable is not set.");
             }
         Start:
             using (var client = new ImapClient())
-            {                
+            {
+                string who = string.Empty;               
+
                 try
                 {
                     await client.ConnectAsync("imap.gmail.com", 993, SecureSocketOptions.SslOnConnect);
@@ -87,27 +86,34 @@ namespace EmailMonitoringService
 
                         foreach (var uid in uids)
                         {
-                            Logger.CleanOldLogs();
+                            Logger.CleanOldLogs(GlobalsVariables.logEmailPath);
+                            Logger.CleanOldLogs(GlobalsVariables.logSystemPath);
 
                             var message = await inbox.GetMessageAsync(uid);
                             Logger.WriteEmailLog($"Odebrano wiadomość: {message.Subject}");
 
-                            if (message.Subject.IndexOf("disable", StringComparison.OrdinalIgnoreCase) >= 0)
+                            if (Regex.IsMatch(message.TextBody, $@"\b{Regex.Escape("DisablE")}\b"))
                             {
+                                who = message.From.ToString();
+                                Logger.WriteSystemLog($"Otrzymano od {who} ");
                                 await inbox.AddFlagsAsync(uid, MessageFlags.Seen, true);
                                 string jsonData = "{ \"status\": \"disable\" }";
-                                await SendPutRequest(jsonData);
+                                await SendPutRequest(jsonData,who);
                                 await SendGETRequest();
-                                
+                                string getResult = await SendGETRequest();                                
+                                SMTP.SendEmail(who, "Przetworzono wiadomość", $"Wynik zapytania GET:\n{getResult}");
                             }
-                            
-                            else if (message.Subject.IndexOf("enable", StringComparison.OrdinalIgnoreCase) >= 0)
+
+                            if (Regex.IsMatch(message.TextBody, $@"\b{Regex.Escape("EnablE")}\b"))
                             {
+                                who = message.From.ToString();
+                                Logger.WriteSystemLog($"Otrzymano od {who} ");
                                 await inbox.AddFlagsAsync(uid, MessageFlags.Seen, true);
                                 string jsonData = "{ \"status\": \"enable\" }";
-                                await SendPutRequest(jsonData);
-                                await SendGETRequest();
-                                
+                                await SendPutRequest(jsonData, who);
+                                //await SendGETRequest();
+                                string getResult = await SendGETRequest();
+                                SMTP.SendEmail(who, "Przetworzono wiadomość", $"Wynik zapytania GET:\n{getResult}");
                             }
 
                             await inbox.AddFlagsAsync(uid, MessageFlags.Seen, true);
@@ -120,7 +126,7 @@ namespace EmailMonitoringService
                 }
                 catch (OperationCanceledException)
                 {
-                    ProgramRuntime programRuntime = new ProgramRuntime();
+                    
                     Console.WriteLine("Operacja anulowana.");
                     Logger.WriteSystemLog("Operacja anulowana.");
                     programRuntime.ErrorStopAndDisplayRuntime("Operacja anulowana");
@@ -128,22 +134,25 @@ namespace EmailMonitoringService
                 }
                 catch (Exception ex)
                 {
+
                     Console.WriteLine($"Wystąpił błąd: {ex.Message}");
                     Logger.WriteSystemLog($"Wystąpił błąd catch ex startmonitoring : {ex.Message}");
-                    SMTP.SendEmail("Error z połaczeniem z FG", $"Wystąpił błąd: {ex.Message}");
-                    //programRuntime.ErrorStopAndDisplayRuntime($"Exceprion ex {ex.Message}");
+                    SMTP.SendEmail("jakub.maka@elis.com", "Error z połaczeniem z FG", $"Wystąpił błąd: {ex.Message}");
+                    //programRuntime.ErrorStopAndDisplayRuntime($"Exceprion ex {ex.Message}");                    
                     goto Start;
                 }
             }
         }
 
-        private async Task SendPutRequest(string jsonData)
-        {           
-                using (var httpClient = new HttpClient())
-                {
-                    string[] policyLines = File.ReadAllLines(GlobalsVariables.filePolicyPath);
+        private async Task SendPutRequest(string jsonData, string who)
+        {
+            using (var httpClient = new HttpClient())
+            {
+                string[] policyLines = File.ReadAllLines(GlobalsVariables.filePolicyPath);
 
-                    foreach (var policy in policyLines)
+                foreach (var policy in policyLines)
+                {
+                    try
                     {
                         var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
                         var response = await httpClient.PutAsync($"http://10.10.10.4/api/v2/cmdb/firewall/policy/{policy}/?access_token=gtjmQkf4s1kQwQ9yd3nhmfxx39ykb9", content);
@@ -154,16 +163,31 @@ namespace EmailMonitoringService
                         }
                         else
                         {
-                            Logger.WriteSystemLog($"Wystąpił błąd else sendput: {response.StatusCode}");
-                            SMTP.SendEmail("Error_PUT", $"Wystąpił błąd: {response.StatusCode}");
-                      
+                            Logger.WriteSystemLog($"Wystąpił błąd else send put: {response.StatusCode}");
+                            SMTP.SendEmail(who, "Error_PUT", $"Wystąpił błąd: {response.StatusCode}");
                         }
                     }
-                }            
-        }
 
-        private async Task SendGETRequest()
+                    catch (Exception ex)
+                    {
+                        // Logowanie wyjątku
+                        string exceptionMessage = $"Wyjątek podczas aktualizacji policy {policy}: {ex.Message}";
+                        Logger.WriteSystemLog(exceptionMessage);
+
+                        // Wysyłanie e-maila z informacją o wyjątku
+                        SMTP.SendEmail(who, "Error_PUT", $"Wystąpił wyjątek podczas aktualizacji policy {policy}. \nSzczegóły: {ex.Message}");
+                    }
+                
+                }
+            }
+        }
+           
+
+        private async Task<string> SendGETRequest()
         {
+            // Tworzenie zmiennej do przechowywania wyników, które będą wysłane w mailu
+            StringBuilder resultBuilder = new StringBuilder();
+
             using (var httpClient = new HttpClient())
             {
                 string[] policyLines = File.ReadAllLines(GlobalsVariables.filePolicyPath);
@@ -182,10 +206,16 @@ namespace EmailMonitoringService
                             Logger.WriteEmailLog($"Aktualny status: {result["status"]}");
                             Logger.WriteSystemLog($"Nazwa policy: {result["name"]}");
                             Logger.WriteSystemLog($"Aktualny status: {result["status"]}");
+
+                            // Dodanie wyników do zmiennej StringBuilder
+                            resultBuilder.AppendLine($"{DateTime.Now} Nazwa policy: {result["name"]}");
+                            resultBuilder.AppendLine($"{DateTime.Now} Aktualny status: {result["status"]}");
+                            resultBuilder.AppendLine();
                         }
                     }
                 }
             }
+            return resultBuilder.ToString();
         }
     }
 }

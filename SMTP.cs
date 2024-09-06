@@ -10,7 +10,7 @@ namespace EmailMonitoringService
 {
     static class SMTP
     {
-        public static void SendEmail(string subject, string body)
+        public static void SendEmail(string email, string subject, string body)
 
         {
             try
@@ -28,8 +28,9 @@ namespace EmailMonitoringService
                         From = new MailAddress(GlobalsVariables.email),
                         Subject = subject,
                         Body = body
+
                     };
-                    mailMessage.To.Add("jakub.maka@elis.com");
+                    mailMessage.To.Add(email);
 
                     // Wysyłka e-maila
                     client.Send(mailMessage);

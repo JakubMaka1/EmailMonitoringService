@@ -39,13 +39,13 @@ namespace EmailMonitoringService
             }
         }
 
-        public static void CleanOldLogs()
+        public static void CleanOldLogs(string path)
         {
             // Odczytanie wszystkich linii z pliku logów
-            string[] logLines = File.ReadAllLines(GlobalsVariables.logEmailPath);
+            string[] logLines = File.ReadAllLines(path);
 
             // Obliczanie daty granicznej (1 dzień temu)
-            DateTime thresholdDate = DateTime.Now.AddDays(-1);
+            DateTime thresholdDate = DateTime.Now.AddDays(-3);
 
             // Filtracja linii, które mają datę nowszą niż 1 dzień
             var filteredLogLines = logLines.Where(line =>
@@ -63,7 +63,7 @@ namespace EmailMonitoringService
             }).ToArray(); // Konwersja do tablicy
 
             // Zapisanie przefiltrowanych linii do pliku logów
-            File.WriteAllLines(GlobalsVariables.logEmailPath, filteredLogLines);
+            File.WriteAllLines(path, filteredLogLines);
         }
         public static void CompareDate()
         {
@@ -73,10 +73,10 @@ namespace EmailMonitoringService
             if (logLines.Length < 2)
             {
                 Console.WriteLine("Tablica nie zawiera wystarczającej liczby elementów do porównania.");
-                SMTP.SendEmail("Problem z plikiem SystemLog", "Brak przynajmniej 2 wpisów w pliku");
+                SMTP.SendEmail("jakub.maka@elis.com", "Problem z plikiem SystemLog", "Brak przynajmniej 2 wpisów w pliku");
             }
             // Zapisanie przefiltrowanych linii do pliku logów do ustawienia w zalożeności ile logów ustawiło się na starcie
-            string ostatniLine = logLines[logLines.Length - 1];
+            string ostatniLine = logLines[logLines.Length - 2];
 
             DateTime ostatniDateTime = DateTime.ParseExact(ostatniLine.Substring(0, 19), GlobalsVariables.dateFormat, CultureInfo.InvariantCulture);
 

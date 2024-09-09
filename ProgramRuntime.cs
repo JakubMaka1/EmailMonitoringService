@@ -21,16 +21,16 @@ namespace EmailMonitoringService
         {
             stopwatch.Stop();
             TimeSpan runtime = stopwatch.Elapsed;
-            Logger.WriteSystemLog($"Program działał przez: {runtime.Hours} godz {runtime.Minutes} min {runtime.Seconds} sek {runtime.Milliseconds} ms");
-            SMTP.SendEmail("jakub.maka@elis.com", "Program przestał działać", $"Program działał przez: {runtime.Hours} godz {runtime.Minutes} min {runtime.Seconds} sek {runtime.Milliseconds} ms");
+            Logger.WriteSystemLog($"Program działał przez: {runtime.Days} dni {runtime.Hours} godz {runtime.Minutes} min {runtime.Seconds} sek {runtime.Milliseconds} ms");
+            SMTP.SendEmail("jakub.maka@elis.com", "Program przestał działać", $"Program działał przez: {runtime.Days} dni {runtime.Hours} godz {runtime.Minutes} min {runtime.Seconds} sek {runtime.Milliseconds} ms");
         }
 
         public void ErrorStopAndDisplayRuntime(string error)
         {
             stopwatch.Stop();
             TimeSpan runtime = stopwatch.Elapsed;
-            Logger.WriteSystemLog($"Program działał przez: {runtime.Hours} godz {runtime.Minutes} min {runtime.Seconds} sek {runtime.Milliseconds} ms");
-            SMTP.SendEmail("jakub.maka@elis.com", $"{error}",$"Program działał przez: {runtime.Hours} godz {runtime.Minutes} min {runtime.Seconds} sek {runtime.Milliseconds} ms");
+            Logger.WriteSystemLog($"Program działał przez: {runtime.Days} dni {runtime.Hours} godz {runtime.Minutes} min {runtime.Seconds} sek {runtime.Milliseconds} ms");
+            SMTP.SendEmail("jakub.maka@elis.com", $"{error}",$"Program działał przez: {runtime.Days} dni {runtime.Hours} godz {runtime.Minutes} min {runtime.Seconds} sek {runtime.Milliseconds} ms");
 
         }
     }

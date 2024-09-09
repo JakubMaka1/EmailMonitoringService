@@ -65,14 +65,16 @@ namespace EmailMonitoringService
                 Logger.WriteEmailLog("Email or password environment variable is not set.");
                 SMTP.SendEmail("jakub.maka@elis.com","Error", "Email or password environment variable is not set.");
             }
-        Start:
+        StartMonitoringLoop:
             using (var client = new ImapClient())
             {
                 string who = string.Empty;               
 
                 try
                 {
-                    await client.ConnectAsync("imap.gmail.com", 993, SecureSocketOptions.SslOnConnect);
+                    // Ustawienia timeoutu
+                    client.Timeout = 60000;  // 60 sekund
+                    await client.ConnectAsync("imap.gmail.com", 993, SecureSocketOptions.SslOnConnect);                   
                     await client.AuthenticateAsync(GlobalsVariables.email, GlobalsVariables.appPassword);
                     var inbox = client.Inbox;
                     await inbox.OpenAsync(FolderAccess.ReadWrite);
@@ -124,9 +126,22 @@ namespace EmailMonitoringService
 
                     await client.DisconnectAsync(true);
                 }
-                catch (OperationCanceledException)
+
+                catch (ImapProtocolException ex)
                 {
-                    
+                    Logger.WriteSystemLog($"ImapProtocolException: {ex.Message}. Próba ponownego połączenia...");
+                    await client.DisconnectAsync(true);
+                    goto StartMonitoringLoop;  // Ponowne uruchomienie połączenia
+                }
+                catch (IOException ex)
+                {
+                    Logger.WriteSystemLog($"IOException: {ex.Message}. Próba ponownego połączenia...");
+                    await client.DisconnectAsync(true);
+                    goto StartMonitoringLoop;  // Ponowne uruchomienie połączenia
+                }
+
+                catch (OperationCanceledException)
+                {                    
                     Console.WriteLine("Operacja anulowana.");
                     Logger.WriteSystemLog("Operacja anulowana.");
                     programRuntime.ErrorStopAndDisplayRuntime("Operacja anulowana");
@@ -134,12 +149,11 @@ namespace EmailMonitoringService
                 }
                 catch (Exception ex)
                 {
-
                     Console.WriteLine($"Wystąpił błąd: {ex.Message}");
                     Logger.WriteSystemLog($"Wystąpił błąd catch ex startmonitoring : {ex.Message}");
                     SMTP.SendEmail("jakub.maka@elis.com", "Error z połaczeniem z FG", $"Wystąpił błąd: {ex.Message}");
-                    //programRuntime.ErrorStopAndDisplayRuntime($"Exceprion ex {ex.Message}");                    
-                    goto Start;
+                    await client.DisconnectAsync(true);
+                    goto StartMonitoringLoop;  // Ponowne uruchomienie połączenia
                 }
             }
         }
